@@ -1,0 +1,64 @@
+
+PROJECT(proxygen)
+
+CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
+
+set(PROXYGEN_PATH "/data/gitlab_cpp/third/proxygen/proxygen/_build")
+set(PROXYGEN_DEPS_PATH "/data/gitlab_cpp/third/proxygen/proxygen/_build/deps")
+set(BOOST_PATH "/data/gitlab_cpp/boost")
+
+#set(CMAKE_MODULE_PATH ${PROXYGEN_DEPS_PATH}/lib64/cmake)
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "/data/gitlab_cpp/third/proxygen/proxygen/_build/deps/lib")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "/data/gitlab_cpp/third/proxygen/proxygen/_build/deps/lib64")
+
+message ("CMAKE_MODULE_PATH=" ${CMAKE_MODULE_PATH})
+
+# include directories
+INCLUDE_DIRECTORIES(${PROXYGEN_PATH}/include)
+INCLUDE_DIRECTORIES(${PROXYGEN_DEPS_PATH}/include)
+INCLUDE_DIRECTORIES(${BOOST_PATH}/include)
+
+set(exe_name proxy)
+
+set(folly_DIR "${PROXYGEN_DEPS_PATH}/lib/cmake/folly")
+set(fmt_DIR "${PROXYGEN_DEPS_PATH}/lib64/cmake/fmt")
+#set(boost_DIR "${BOOST_PATH}/lib/cmake/Boost-1.74.0")
+
+#message ("boost_DIR" ${boost_DIR})
+
+find_package(boost)
+
+find_package(folly)
+
+if(FOLLY_FOUND)
+    message ("FOLLY_INCLUDE_DIR" ${FOLLY_INCLUDE_DIR})
+    message ("FOLLY_LIBRARY" ${FOLLY_LIBRARY})
+    target_include_directories(${FOLLY_INCLUDE_DIR})
+    target_link_libraries(${exe_name} ${FOLLY_LIBRARY})
+else(FOLLY_FOUND)
+    message(FATAL_ERROR "FOLLY NOT FOUND")
+endif(FOLLY_FOUND)
+
+
+LINK_DIRECTORIES(
+  ${PROXYGEN_PATH}/lib
+  ${PROXYGEN_DEPS_PATH}/lib
+  ${PROXYGEN_DEPS_PATH}/lib64
+  /data/gitlab_cpp/third/openssl
+  /usr/local/lib
+)
+
+aux_source_directory(. SRC_LIST)
+
+
+add_executable(${exe_name} ${SRC_LIST})
+target_link_libraries(${exe_name} proxygen)
+target_link_libraries(${exe_name} proxygenhttpserver)
+target_link_libraries(${exe_name} pthread)
+target_link_libraries(${exe_name} glog.a)
+target_link_libraries(${exe_name} zstd.a)
+target_link_libraries(${exe_name} gflags.a)
+target_link_libraries(${exe_name} ssl.a)
+target_link_libraries(${exe_name} event.a)
+target_link_libraries(${exe_name} event_openssl.a)

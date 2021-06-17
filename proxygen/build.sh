@@ -17,6 +17,8 @@ COLOR_RED="\033[0;31m"
 COLOR_GREEN="\033[0;32m"
 COLOR_OFF="\033[0m"
 
+BOOST_DIR="/data/gitlab_cpp/base-library/common/contrib/include/boost"
+
 function detect_platform() {
   unameOut="$(uname -s)"
   case "${unameOut}" in
@@ -28,77 +30,25 @@ function detect_platform() {
 }
 
 function install_dependencies_linux() {
-  sudo apt-get install -yq \
-    git \
-    cmake \
-    m4 \
-    g++ \
-    flex \
-    bison \
-    libgflags-dev \
-    libgoogle-glog-dev \
-    libkrb5-dev \
-    libsasl2-dev \
-    libnuma-dev \
-    pkg-config \
-    libssl-dev \
-    libcap-dev \
-    gperf \
-    libevent-dev \
-    libtool \
-    libboost-all-dev \
-    libjemalloc-dev \
-    libsnappy-dev \
+  yum install -y \
     wget \
     unzip \
-    libiberty-dev \
-    liblz4-dev \
-    liblzma-dev \
+    git \
     make \
-    zlib1g-dev \
-    binutils-dev \
-    libsodium-dev \
-    libdouble-conversion-dev
-}
-
-function install_dependencies_mac() {
-  # install the default dependencies from homebrew
-  brew install -f            \
-    cmake                    \
-    m4                       \
-    boost                    \
-    double-conversion        \
-    gflags                   \
-    glog                     \
-    gperf                    \
-    libevent                 \
-    lz4                      \
-    snappy                   \
-    xz                       \
-    openssl                  \
-    libsodium
-
-  brew link                 \
-    cmake                   \
-    boost                   \
-    double-conversion       \
-    gflags                  \
-    glog                    \
-    gperf                   \
-    libevent                \
-    lz4                     \
-    snappy                  \
-    openssl                 \
-    xz                      \
-    libsodium
+    libdwarf-devel \
+    libunwind-devel \
+    snappy-devel \
+    lz4 \
+    lz4-devel \
+    openssl \
+    openssl-devel \
+    gperf
 }
 
 function install_dependencies() {
   echo -e "${COLOR_GREEN}[ INFO ] install dependencies ${COLOR_OFF}"
   if [ "$PLATFORM" = "Linux" ]; then
     install_dependencies_linux
-  elif [ "$PLATFORM" = "Mac" ]; then
-    install_dependencies_mac
   else
     echo -e "${COLOR_RED}[ ERROR ] Unknown platform: $PLATFORM ${COLOR_OFF}"
     exit 1
@@ -109,9 +59,6 @@ function synch_dependency_to_commit() {
   # Utility function to synch a dependency to a specific commit. Takes two arguments:
   #   - $1: folder of the dependency's git repository
   #   - $2: path to the text file containing the desired commit hash
-  if [ "$FETCH_DEPENDENCIES" = false ] ; then
-    return
-  fi
   DEP_REV=$(sed 's/Subproject commit //' "$2")
   pushd "$1"
   git fetch
@@ -120,16 +67,47 @@ function synch_dependency_to_commit() {
   popd
 }
 
+function set_doubleconversion() {
+    DBCONVERT_DIR=$DEPS_DIR/double-conversion
+    DBCONVERT_BUILD_DIR=$DEPS_DIR/double-conversion/_build/
+
+    if [ ! -d "$DBCONVERT_DIR" ] ; then
+        echo -e "${COLOR_GREEN}[ INFO ] Cloning doubleconversion repo ${COLOR_OFF}"
+        git clone https://github.com/google/double-conversion.git  "$DBCONVERT_DIR"
+    fi
+    cd "$DBCONVERT_DIR"
+    #git fetch --tags
+    git checkout v3.1.5
+    echo -e "${COLOR_GREEN}Building double-conversion ${COLOR_OFF}"
+    mkdir -p "$DBCONVERT_BUILD_DIR"
+    cd "$DBCONVERT_BUILD_DIR" || exit
+
+    cmake                                           \
+        -DCMAKE_PREFIX_PATH="$DEPS_DIR"               \
+        -DCMAKE_INSTALL_PREFIX="$DEPS_DIR"            \
+        -DBUILD_TESTS=OFF                             \
+        "$MAYBE_OVERRIDE_CXX_FLAGS"                   \
+        ..
+    make -j "$JOBS"
+    make install
+    echo -e "${COLOR_GREEN}double-doubleconversion is installed ${COLOR_OFF}"
+    cd "$BWD" || exit
+}
+
 function setup_fmt() {
   FMT_DIR=$DEPS_DIR/fmt
   FMT_BUILD_DIR=$DEPS_DIR/fmt/build/
 
+  echo "$FMT_DIR"
+
   if [ ! -d "$FMT_DIR" ] ; then
+    echo "start to clone fmt"
     echo -e "${COLOR_GREEN}[ INFO ] Cloning fmt repo ${COLOR_OFF}"
     git clone https://github.com/fmtlib/fmt.git  "$FMT_DIR"
   fi
+  echo "finished clone fmt"
   cd "$FMT_DIR"
-  git fetch --tags
+  #git fetch --tags
   git checkout 6.2.1
   echo -e "${COLOR_GREEN}Building fmt ${COLOR_OFF}"
   mkdir -p "$FMT_BUILD_DIR"
@@ -139,14 +117,133 @@ function setup_fmt() {
     -DCMAKE_PREFIX_PATH="$DEPS_DIR"               \
     -DCMAKE_INSTALL_PREFIX="$DEPS_DIR"            \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo             \
+    -DBUILD_TESTS=OFF                             \
     "$MAYBE_OVERRIDE_CXX_FLAGS"                   \
-    -DFMT_DOC=OFF                                 \
-    -DFMT_TEST=OFF                                \
     ..
   make -j "$JOBS"
   make install
   echo -e "${COLOR_GREEN}fmt is installed ${COLOR_OFF}"
   cd "$BWD" || exit
+}
+
+function setup_libevent() {
+    NAME=libevent
+    DIR=$DEPS_DIR/$NAME
+    BUILD_DIR=$DEPS_DIR/$NAME/_build/
+
+    if [ ! -d "$DIR" ] ; then
+        echo -e "${COLOR_GREEN}[ INFO ] Cloning $NAME repo ${COLOR_OFF}"
+        git clone https://github.com/libevent/libevent.git  "$DIR"
+    fi
+    cd "$DIR"
+    #git fetch --tags
+    git checkout release-2.1.12-stable
+    echo -e "${COLOR_GREEN}Building $NAME ${COLOR_OFF}"
+    mkdir -p "$BUILD_DIR"
+    cd "$BUILD_DIR" || exit
+
+    cmake                                           \
+        -DCMAKE_PREFIX_PATH="$DEPS_DIR"               \
+        -DCMAKE_INSTALL_PREFIX="$DEPS_DIR"            \
+        -DBUILD_TESTS=OFF                             \
+        "$MAYBE_OVERRIDE_CXX_FLAGS"                   \
+        ..
+    make -j "$JOBS"
+    make install
+    echo -e "${COLOR_GREEN}$NAME is installed ${COLOR_OFF}"
+    cd "$BWD" || exit
+}
+
+function setup_gflag() {
+    NAME=gflags
+    DIR=$DEPS_DIR/$NAME
+    BUILD_DIR=$DEPS_DIR/$NAME/_build/
+
+    if [ ! -d "$DIR" ] ; then
+        echo -e "${COLOR_GREEN}[ INFO ] Cloning $NAME repo ${COLOR_OFF}"
+        git clone https://github.com/gflags/gflags.git  "$DIR"
+    fi
+    echo "finished clone ${NAME}"
+    cd "$DIR"
+    #git fetch --tags
+    git checkout v2.2.2
+    echo "checkout ${NAME} finished"
+    echo -e "${COLOR_GREEN}Building $NAME ${COLOR_OFF}"
+    mkdir -p "$BUILD_DIR"
+    cd "$BUILD_DIR" || exit
+
+    cmake                                           \
+        -DCMAKE_PREFIX_PATH="$DEPS_DIR"               \
+        -DCMAKE_INSTALL_PREFIX="$DEPS_DIR"            \
+        -DBUILD_TESTS=OFF                             \
+        "$MAYBE_OVERRIDE_CXX_FLAGS"                   \
+        ..
+    make -j "$JOBS"
+    make install
+    echo -e "${COLOR_GREEN}$NAME is installed ${COLOR_OFF}"
+    cd "$BWD" || exit
+}
+
+function setup_glog() {
+    NAME=glog
+    DIR=$DEPS_DIR/$NAME
+    BUILD_DIR=$DEPS_DIR/$NAME/_build/
+
+    if [ ! -d "$DIR" ] ; then
+        echo -e "${COLOR_GREEN}[ INFO ] Cloning $NAME repo ${COLOR_OFF}"
+        git clone  https://github.com/google/glog.git  "$DIR"
+    fi
+    cd "$DIR"
+    #git fetch --tags
+    git checkout v0.4.0
+    echo -e "${COLOR_GREEN}Building $NAME ${COLOR_OFF}"
+    mkdir -p "$BUILD_DIR"
+    cd "$BUILD_DIR" || exit
+
+    cmake                                           \
+        -DCMAKE_PREFIX_PATH="$DEPS_DIR"               \
+        -DCMAKE_INSTALL_PREFIX="$DEPS_DIR"            \
+        -DBUILD_TESTS=OFF                             \
+        "$MAYBE_OVERRIDE_CXX_FLAGS"                   \
+        ..
+    make -j "$JOBS"
+    make install
+    echo -e "${COLOR_GREEN}$NAME is installed ${COLOR_OFF}"
+    cd "$BWD" || exit
+}
+
+function setup_libsodium() {
+    NAME=libsodium
+    DIR=$DEPS_DIR/$NAME
+
+    if [ ! -d "$DIR" ] ; then
+        echo -e "${COLOR_GREEN}[ INFO ] Cloning $NAME repo ${COLOR_OFF}"
+        git clone https://github.com/jedisct1/libsodium --branch stable  "$DIR"
+    fi
+    cd "$DIR"
+    echo -e "${COLOR_GREEN}Building $NAME ${COLOR_OFF}"
+    ./configure
+    make -j "$JOBS"
+    make install
+    echo -e "${COLOR_GREEN}$NAME is installed ${COLOR_OFF}"
+    cd "$BWD" || exit
+}
+
+
+function setup_zstd() {
+    NAME=zstd
+    DIR=$DEPS_DIR/$NAME
+
+    if [ ! -d "$DIR" ] ; then
+        echo -e "${COLOR_GREEN}[ INFO ] Cloning $NAME repo ${COLOR_OFF}"
+        git clone https://github.com/facebook/zstd.git  "$DIR"
+    fi
+    cd "$DIR"
+    echo -e "${COLOR_GREEN}Building $NAME ${COLOR_OFF}"
+    make
+    make install
+    echo -e "${COLOR_GREEN}$NAME is installed ${COLOR_OFF}"
+    cd "$BWD" || exit
 }
 
 function setup_googletest() {
@@ -158,7 +255,7 @@ function setup_googletest() {
     git clone https://github.com/google/googletest.git  "$GTEST_DIR"
   fi
   cd "$GTEST_DIR"
-  git fetch --tags
+  #git fetch --tags
   git checkout release-1.8.0
   echo -e "${COLOR_GREEN}Building googletest ${COLOR_OFF}"
   mkdir -p "$GTEST_BUILD_DIR"
@@ -167,35 +264,12 @@ function setup_googletest() {
   cmake                                           \
     -DCMAKE_PREFIX_PATH="$DEPS_DIR"               \
     -DCMAKE_INSTALL_PREFIX="$DEPS_DIR"            \
+    -DBUILD_TESTS=OFF                             \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo             \
     ..
   make -j "$JOBS"
   make install
   echo -e "${COLOR_GREEN}googletest is installed ${COLOR_OFF}"
-  cd "$BWD" || exit
-}
-
-function setup_zstd() {
-  ZSTD_DIR=$DEPS_DIR/zstd
-  ZSTD_BUILD_DIR=$DEPS_DIR/zstd/build/cmake/builddir
-  ZSTD_INSTALL_DIR=$DEPS_DIR
-  if [ ! -d "$ZSTD_DIR" ] ; then
-    echo -e "${COLOR_GREEN}[ INFO ] Cloning zstd repo ${COLOR_OFF}"
-    git clone https://github.com/facebook/zstd.git "$ZSTD_DIR"
-  fi
-
-  echo -e "${COLOR_GREEN}Building Zstd ${COLOR_OFF}"
-  mkdir -p "$ZSTD_BUILD_DIR"
-  cd "$ZSTD_BUILD_DIR" || exit
-  cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo           \
-    -DBUILD_TESTS=OFF                               \
-    -DCMAKE_PREFIX_PATH="$ZSTD_INSTALL_DIR"         \
-    -DCMAKE_INSTALL_PREFIX="$ZSTD_INSTALL_DIR"      \
-    ${CMAKE_EXTRA_ARGS[@]+"${CMAKE_EXTRA_ARGS[@]}"} \
-    ..
-  make -j "$JOBS"
-  make install
-  echo -e "${COLOR_GREEN}Zstd is installed ${COLOR_OFF}"
   cd "$BWD" || exit
 }
 
@@ -206,18 +280,9 @@ function setup_folly() {
   if [ ! -d "$FOLLY_DIR" ] ; then
     echo -e "${COLOR_GREEN}[ INFO ] Cloning folly repo ${COLOR_OFF}"
     git clone https://github.com/facebook/folly.git "$FOLLY_DIR"
+    echo -e "${COLOR_GREEN}[ INFO ] Cloning folly finished ${COLOR_OFF}"
   fi
   synch_dependency_to_commit "$FOLLY_DIR" "$BASE_DIR"/../build/deps/github_hashes/facebook/folly-rev.txt
-  if [ "$PLATFORM" = "Mac" ]; then
-    # Homebrew installs OpenSSL in a non-default location on MacOS >= Mojave
-    # 10.14 because MacOS has its own SSL implementation.  If we find the
-    # typical Homebrew OpenSSL dir, load OPENSSL_ROOT_DIR so that cmake
-    # will find the Homebrew version.
-    dir=/usr/local/opt/openssl
-    if [ -d $dir ]; then
-        export OPENSSL_ROOT_DIR=$dir
-    fi
-  fi
   echo -e "${COLOR_GREEN}Building Folly ${COLOR_OFF}"
   mkdir -p "$FOLLY_BUILD_DIR"
   cd "$FOLLY_BUILD_DIR" || exit
@@ -240,6 +305,7 @@ function setup_folly() {
     -DCMAKE_INSTALL_PREFIX="$DEPS_DIR"            \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo             \
     -DBUILD_TESTS=OFF                             \
+    -DBOOST_ROOT="$BOOST_DIR"                     \
     "$MAYBE_USE_STATIC_DEPS"                      \
     "$MAYBE_USE_STATIC_BOOST"                     \
     "$MAYBE_BUILD_SHARED_LIBS"                    \
@@ -277,6 +343,7 @@ function setup_fizz() {
     -DCMAKE_PREFIX_PATH="$DEPS_DIR"             \
     -DCMAKE_INSTALL_PREFIX="$DEPS_DIR"          \
     -DBUILD_TESTS=OFF                           \
+    -DBOOST_ROOT="$BOOST_DIR"                     \
     "$MAYBE_USE_STATIC_DEPS"                    \
     "$MAYBE_BUILD_SHARED_LIBS"                  \
     "$MAYBE_OVERRIDE_CXX_FLAGS"                 \
@@ -295,7 +362,7 @@ function setup_wangle() {
     echo -e "${COLOR_GREEN}[ INFO ] Cloning wangle repo ${COLOR_OFF}"
     git clone https://github.com/facebook/wangle "$WANGLE_DIR"
   fi
-  synch_dependency_to_commit "$WANGLE_DIR" "$BASE_DIR"/../build/deps/github_hashes/facebook/wangle-rev.txt
+  #synch_dependency_to_commit "$WANGLE_DIR" "$BASE_DIR"/../build/deps/github_hashes/facebook/wangle-rev.txt
   echo -e "${COLOR_GREEN}Building Wangle ${COLOR_OFF}"
   mkdir -p "$WANGLE_BUILD_DIR"
   cd "$WANGLE_BUILD_DIR" || exit
@@ -311,6 +378,7 @@ function setup_wangle() {
     -DCMAKE_PREFIX_PATH="$DEPS_DIR"             \
     -DCMAKE_INSTALL_PREFIX="$DEPS_DIR"          \
     -DBUILD_TESTS=OFF                           \
+    -DBOOST_ROOT="$BOOST_DIR"                     \
     "$MAYBE_USE_STATIC_DEPS"                    \
     "$MAYBE_BUILD_SHARED_LIBS"                  \
     "$MAYBE_OVERRIDE_CXX_FLAGS"                 \
@@ -359,10 +427,9 @@ function setup_mvfst() {
 JOBS=8
 WITH_QUIC=false
 INSTALL_DEPENDENCIES=true
-FETCH_DEPENDENCIES=true
 PREFIX=""
 COMPILER_FLAGS=""
-USAGE="./build.sh [-j num_jobs] [-q|--with-quic] [-m|--no-jemalloc] [--no-install-dependencies] [-p|--prefix] [-x|--compiler-flags] [--no-fetch-dependencies]"
+USAGE="./build.sh [-j num_jobs] [-q|--with-quic] [-m|--no-jemalloc] [--no-install-dependencies] [-p|--prefix] [-x|--compiler-flags]"
 while [ "$1" != "" ]; do
   case $1 in
     -j | --jobs ) shift
@@ -376,9 +443,6 @@ while [ "$1" != "" ]; do
                   ;;
     --no-install-dependencies )
                   INSTALL_DEPENDENCIES=false
-          ;;
-    --no-fetch-dependencies )
-                  FETCH_DEPENDENCIES=false
           ;;
     --build-for-fuzzing )
                   BUILD_FOR_FUZZING=true
@@ -425,11 +489,17 @@ mkdir -p "$DEPS_DIR"
 cd "$(dirname "$0")"
 
 setup_fmt
-setup_googletest
+setup_gflag
+setup_glog
 setup_zstd
+setup_libevent
+set_doubleconversion
+setup_libsodium
+setup_googletest
 setup_folly
 setup_fizz
 setup_wangle
+
 MAYBE_BUILD_QUIC=""
 if [ "$WITH_QUIC" == true ] ; then
   setup_mvfst
@@ -461,6 +531,7 @@ cmake                                     \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo       \
   -DCMAKE_PREFIX_PATH="$DEPS_DIR"         \
   -DCMAKE_INSTALL_PREFIX="$PREFIX"        \
+  -DBOOST_ROOT="$BOOST_DIR"                \
   "$MAYBE_BUILD_QUIC"                     \
   "$MAYBE_BUILD_TESTS"                    \
   "$MAYBE_BUILD_FUZZERS"                  \
